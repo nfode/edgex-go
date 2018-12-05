@@ -200,6 +200,43 @@ func delLogs(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, strconv.Itoa(removed))
 }
 
+func removeOldLogs(w http.ResponseWriter, r *http.Request) {
+	criteria := getCriteria(w, r)
+	if criteria == nil {
+		return
+	}
+	age := bone.GetValue(r, "age")
+	var parsedAge int64
+	if len(age) > 0 {
+		var err error
+		parsedAge, err = strconv.ParseInt(age, 10, 64)
+		var s string
+		if err != nil {
+			s = fmt.Sprintf("Could not parse age %s", age)
+		} else if criteria.Start < 0 {
+			s = fmt.Sprintf("Age is not positive %d", criteria.End)
+		}
+		if len(s) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, s)
+		}
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, "Age is not set")
+	}
+	criteria.Start = 0
+	criteria.End = db.MakeTimestamp() - parsedAge
+
+	removed, err := dbClient.remove(*criteria)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, strconv.Itoa(removed))
+}
+
 func replyMetrics(w http.ResponseWriter, r *http.Request) {
 
 	var t internal.Telemetry
@@ -278,5 +315,14 @@ func HttpServer() http.Handler {
 	mv1.Delete("/logs/logLevels/:levels/originServices/:services/:start/:end", http.HandlerFunc(delLogs))
 	mv1.Delete("/logs/logLevels/:levels/originServices/:services/labels/:labels/:start/:end", http.HandlerFunc(delLogs))
 	mv1.Delete("/logs/logLevels/:levels/originServices/:services/labels/:labels/keywords/:keywords/:start/:end", http.HandlerFunc(delLogs))
+
+	mv1.Delete("/logs/removeOld/age/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/keywords/:keywords/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/labels/:labels/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/originServices/:services/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/logLevels/:levels/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/logLevels/:levels/originServices/:services/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/logLevels/:levels/originServices/:services/labels/:labels/:age", http.HandlerFunc(removeOldLogs))
+	mv1.Delete("/logs/removeOld/age/logLevels/:levels/originServices/:services/labels/:labels/keywords/:keywords/:age", http.HandlerFunc(removeOldLogs))
 	return mux
 }
